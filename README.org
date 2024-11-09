@@ -1,0 +1,153 @@
+#+title: Pokemacs layout
+#+author: mattiasdrp
+#+language: en
+
+Pokemacs layout provides a way to save window layouts and apply them. Unlike ~desktop-save~, it's not about saving the state of your Emacs but more about restoring your windows the way you want them.
+
+* Introduction
+
+A friend of mine had a wide screen and told me about his morning routine:
+- Split horizontally thrice
+- Start magit
+- Lock the window
+- Split vertically
+- Compile
+- Lock the window
+- Split vertically
+- Open a LSP buffer
+- Lock the window
+
+  I had just received a wide screen and the idea of having to do that whenever I wanted to open Emacs frightened me. I started with a simple function to help my friends:
+
+  #+begin_src emacs-lisp
+    (defun pokemacs-restore-session (&optional columns)
+      "Restore a session by creating the proper buffers."
+      (interactive "P")
+      (when use-visual-fill (visual-fill-column-mode -1))
+      (setq columns-number (or columns pokemacs-columns))
+      (setq current-prefix-arg nil)
+      (setq middle-window (selected-window))
+      (dotimes (_ (- columns-number 2))
+        (setq middle-window (split-window-right))
+        (select-window middle-window)
+        (balance-windows))
+      (select-window middle-window)
+      ;; Third window, start with magit
+      (setq magit-window (split-window-right))
+      (select-window magit-window)
+      (with-selected-window magit-window
+        (defvar magit-display-buffer-function)
+        (let ((magit-display-buffer-function 'magit-display-buffer-same-window-except-diff-v1))
+          (magit-status-quick))
+        ;; Lock after creating the magit buffer otherwise it's created in another window
+        (locked-window-buffer-mode))
+      ;; Fourth window below magit is the compilation window,
+      ;; create a buffer without compiling
+      (setq compilation-window (split-window-below))
+      (select-window compilation-window)
+      (set-window-buffer (selected-window) (get-buffer-create "*compilation*"))
+      (with-selected-window compilation-window
+        (locked-window-buffer-mode))
+      ;; Fifth window below compilation is the lsp-help window,
+      ;; create a buffer without calling lsp
+      (setq lsp-window (split-window-below))
+      (select-window lsp-window)
+      (set-window-buffer (selected-window) (get-buffer-create "*lsp-help*"))
+      (with-selected-window lsp-window
+        (locked-window-buffer-mode))
+      (select-window middle-window)
+      (balance-windows))
+#+end_src
+
+And then I thought: "Hey, I'm sure I could create a simple layout type and allow for more customisations, let's do it!". This is the result of this experiment.
+
+* Getting started
+
+Currently this package is not in any package manager but you can use it easily with elpaca or straight:
+
+#+begin_src emacs-lisp
+  (use-package pokemacs-layout
+    :ensure (:host github :repo "mattiasdrp/pokemacs-layout")
+    :commands pokemacs-layout-apply)
+#+end_src
+
+Or, if you don't use ~use-package~:
+
+#+begin_src emacs-lisp
+  (require 'pokemacs-layout)
+#+end_src
+
+Just make sure that ~pokemacs-layout.el~ is in ~load-path~
+
+* How to use?
+
+A layout is a list of alists.
+
+** Simple layout: 3 columns, no actions
+
+#+begin_src emacs-lisp :results none
+  (defvar pokemacs-layout-simple-3C
+    '((column . ())
+      (column . ())
+      (none . ())))
+
+  ;; Or:
+  (defvar pokemacs-layout-simple-3C
+    '((column . (nil nil 2))))
+#+end_src
+
+You can already use this layout with
+#+begin_src emacs-lisp :results none
+(pokemacs-layout--apply-layout pokemacs-layout-simple-3C)
+#+end_src
+
+(if you read this README in emacs you can evaluate the two buffers with ~C-c C-c~)
+
+This simple example shows the skeleton of a layout: ~(split . action)~.
+Currently ~split~ can be:
+- ~column~ (split horizontally)
+- ~row~ (split vertically)
+- ~none~ (don't split this window)
+
+  ~none~ should always be used as the last alist in any nested layout otherwise a last split will be performed.
+An ~action~ is composed of three fields ~(fill lock number)~:
+- ~fill~ is anything to help creating the buffer in the window (~nil~, a buffer name, a function call...)
+- ~lock~ is ~t~ if this window should be locked, meaning no buffer can spawn there
+- ~number~ to repeat this alist multiple times
+
+** Complex layout: 3 columns, the last one is also split in 3 with 3 specific buffers
+
+#+begin_src emacs-lisp
+  (defvar pokemacs-layout-prog-default
+    '((column . (nil nil 2))
+      (none . ('((row . (magit-status-quick t))
+                 (row . ("*compilation*" t))
+                 (none . ("*lsp-help*" t))) nil nil))))
+#+end_src
+
+This layout will create three columns:
+- The first two will be the current buffer duplicated in two windows
+- The third one is split in three locked rows:
+  - The first one is created by executing ~(magit-status-quick)~
+  - The second one is created with the ~compilation~ buffer (created if it doesn't exist)
+  - The third one is like the second one but with the ~lsp-help~ buffer
+
+
+
+** Customize ~pokemacs-layout-layouts~
+
+Wrap your newly created function:
+
+#+begin_src emacs-lisp
+  (pokemacs-layout--create-layout
+   "my/layout"
+   my/layout
+   "My layout description")
+#+end_src
+
+And add it to ~pokemacs-layout-layouts~, this will make it available when calling ~M-x pokemacs-layout-apply~.
+* Future plans
+
+- [ ] Improve this README
+- [ ] Add some pictures or gif to this README
+- [ ] Add new frames to the layout choices with monitor choice
