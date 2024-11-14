@@ -104,6 +104,11 @@ a variable: the value stored in this variable"
                (row . ("*compilation*" t))
                (none . ("*lsp-help*" t))) nil nil))))
 
+(defvar pokemacs-layout-prog-default-nomagit
+  '((column . (nil nil 2))
+    (none . ('((row . ("*compilation*" t))
+               (none . ("*lsp-help*" t))) nil nil))))
+
 (defvar pokemacs-layout-prog-default-custom-number
   '((column . (nil nil pokemacs-layout-columns))
     (none . ('((row . (magit-status-quick t))
@@ -137,6 +142,10 @@ The last one is split in three locked horizontal windows:
       "prog default layout"
       pokemacs-layout-prog-default
       "3 vertical columns with last one being magit | compilation | lsp-help")
+    ,(pokemacs-layout--create-layout
+      "prog default layout no magit"
+      pokemacs-layout-prog-default-nomagit
+      "3 vertical columns with last one being compilation | lsp-help")
     ,(pokemacs-layout--create-layout
       "prog custom layout"
       pokemacs-layout-prog-default-custom-number
