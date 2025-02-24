@@ -30,27 +30,28 @@
     ('row      'split-window-below)
     (_         'selected-window)))
 
-
-;;; WINDOWS LAYOUT
-
-(defun pokemacs-layout--lock-window (lock-window)
-  "Lock the window if LOCK-WINDOW is t"
-  (when lock-window
-    (with-selected-window (selected-window)
-      (set-window-dedicated-p (selected-window) t))))
+(defun pokemacs-layout--get-buffer-name (buffer-action)
+  "Returns the name associated to BUFFER-ACTION."
+  (buffer-name (pokemacs-layout--get-buffer buffer-action)))
 
 (defun pokemacs-layout--get-number (number)
   "Returns NUMBER as an integer.
 NUMBER can be:
-nil: 1
-an integer i: i
-a variable: the value stored in this variable"
+- nil: 1
+- an integer i: i
+- a variable: the value stored in this variable"
   (let ((number (eval number)))
     (cond
      ((and (symbolp number) (numberp number)) (symbol-value number))
      ((numberp number) number)
      ((functionp number) (funcall number))
      (t 1))))
+
+(defun pokemacs-layout--lock-window (lock-window)
+  "Lock the window if LOCK-WINDOW is t"
+  (when lock-window
+    (with-selected-window (selected-window)
+      (set-window-dedicated-p (selected-window) t))))
 
 (defun pokemacs-layout--apply-recursive-layout-windows-alist (layout-windows-alist)
   "Apply one level of LAYOUT-WINDOWS-ALIST and calls itself recursively."
@@ -81,8 +82,6 @@ a variable: the value stored in this variable"
                    (select-window (funcall split-function))
                    (balance-windows)))))))
 
-;;; SIDES LAYOUT
-
 (defun pokemacs-layout--side-place (side)
   "Returns the place of SIDE in the window-side-slots list."
   (pcase side
@@ -91,23 +90,12 @@ a variable: the value stored in this variable"
     ('right   2)
     ('bottom  3)))
 
-(defun xah-random-string (&optional CountX)
-  "return a random string of length CountX.
-The possible chars are: 2 to 9, upcase or lowercase English alphabet but no a e i o u, no L l and no 0 1.
-
-URL `http://xahlee.info/emacs/emacs/elisp_insert_random_number_string.html'
-Version: 2024-04-03"
-  (interactive )
-  (let ((xcharset "BCDFGHJKMNPQRSTVWXYZbcdfghjkmnpqrstvwxyz23456789") xcount xvec)
-    (setq xcount (length xcharset))
-    (setq xvec (mapcar (lambda (_) (aref xcharset (random xcount))) (make-vector (if CountX CountX 5) 0)))
-    (mapconcat 'char-to-string xvec)))
-
 (defun pokemacs-layout--get-max-slots (side-properties)
   "Find max slot in slot properties."
   (cl-loop for (slot _ _) in side-properties maximize slot))
 
 (defun pokemacs-layout--get-buffer (action)
+  "Returns the buffer associated to ACTION."
   (cond
    ((functionp action)
     ;; If the action is a function we apply it in the current window
@@ -120,34 +108,42 @@ Version: 2024-04-03"
     ;; If the action is a string, create a buffer with this string as a name
     (get-buffer-create action))
    ((listp action)
-    (get-buffer-create (car action)))
+    ;; If the action is a list, create a buffer with the first action
+    (get-buffer-create (pokemacs-layout--get-buffer (car action))))
    (t (message "unknown action '%S'" action))))
 
 (defun pokemacs-layout--apply-layout-sides-alist (layout-sides-alist)
-  "For each side in LAYOUT-SIDES-ALIST, creates its layout."
-  (cl-loop for (side . properties) in layout-sides-alist do
-           (let ((max_slots (pokemacs-layout--get-max-slots properties))
-                 (side-place (pokemacs-layout--side-place side)))
-             ;; Replace the max number of slots for SIDE in window-side-slots
-             (setf (nth side-place window-sides-slots) max_slots)
-             (cl-loop for (slot buffer-action _) in properties do
-                      (let ((buffer (pokemacs-layout--get-buffer buffer-action)))
-                        (when (listp buffer-action)
-                          (add-to-list 'display-buffer-alist
-                                       `(,(mapconcat 'identity buffer-action "\\|")
-                                         display-buffer-in-side-window
-                                         (side . ,side)
-                                         (slot . ,slot)
-                                         (dedicated . t)
-                                         (window-width . ,pokemacs-layout-sidebar-width))))
-                        (display-buffer-in-side-window
-                         buffer
-                         `((side . ,side)
+  "For each side in LAYOUT-SIDES-ALIST, create its layout."
+  (cl-loop
+   for (side . properties) in layout-sides-alist do
+   (let ((max_slots (pokemacs-layout--get-max-slots properties))
+         (side-place (pokemacs-layout--side-place side)))
+     ;; Replace the max number of slots for SIDE in window-side-slots
+     (setf (nth side-place window-sides-slots) max_slots)
+     (cl-loop
+      for (slot buffer-action _) in properties do
+      (let ((buffer (pokemacs-layout--get-buffer buffer-action)))
+        (if (listp buffer-action)
+            (add-to-list 'display-buffer-alist
+                         `(,(mapconcat #'pokemacs-layout--get-buffer-name buffer-action "\\|")
+                           display-buffer-in-side-window
+                           (side . ,side)
                            (slot . ,slot)
                            (dedicated . t)
-                           (window-width . ,pokemacs-layout-sidebar-width))))))))
-
-;;; MAIN LAYOUT FUNCTION
+                           (window-width . ,pokemacs-layout-sidebar-width)))
+          (add-to-list 'display-buffer-alist
+                       `(,(pokemacs-layout--get-buffer-name buffer-action)
+                         display-buffer-in-side-window
+                         (side . ,side)
+                         (slot . ,slot)
+                         (dedicated . t)
+                         (window-width . ,pokemacs-layout-sidebar-width))))
+        (display-buffer-in-side-window
+         buffer
+         `((side . ,side)
+           (slot . ,slot)
+           (dedicated . t)
+           (window-width . ,pokemacs-layout-sidebar-width))))))))
 
 ;;;###autoload
 (defun pokemacs-layout--apply-layout (layout-windows-alist layout-sides-alist)
@@ -166,8 +162,6 @@ The layout is split in two parts:
   (let ((magit-display-buffer-function 'magit-display-buffer-same-window-except-diff-v1))
     (pokemacs-layout--apply-recursive-layout-windows-alist layout-windows-alist)
     (pokemacs-layout--apply-layout-sides-alist layout-sides-alist)))
-
-;;; PRE-RECORDED LAYOUTS
 
 (defvar pokemacs-layout-prog-default
   '(:windows
@@ -188,8 +182,7 @@ The layout is split in two parts:
     ((column . (nil nil pokemacs-layout-columns)))
     :sides
     ((right . ((1 magit-status-quick t)
-               (2 "*compilation*" t)
-               (3 "*lsp-help*" t))))))
+               (2 ("*compilation*" "*lsp-help*") t))))))
 
 (defvar pokemacs-layout-elisp-default
   '(:windows
@@ -212,7 +205,7 @@ The layout is split in two parts:
 (defcustom pokemacs-layout-columns 3
   "Number of columns for the default layouts.
 The n-1 first columns are unlocked vertical columns
-The last one is split in three locked horizontal windows:
+The last one is a sidebar split in three locked horizontal windows:
 - magit
 - compilation or ielm
 - lsp-help or Messages"
@@ -267,6 +260,25 @@ SPLIT-TYPE is `column', `row', `none'.
          (layout-windows (plist-get layout-layout :windows))
          (layout-sides (plist-get layout-layout :sides)))
     (pokemacs-layout--apply-layout layout-windows layout-sides)))
+
+(defvar pokemacs-layout--toggled-side-windows nil)
+
+(defun pokemacs-layout--disable-side-windows (&rest _)
+  "Disable side-windows."
+  (let* ((frame (window-normalize-frame nil))
+         (window--sides-inhibit-check t))
+    (when (window-with-parameter 'window-side nil frame)
+      (setq pokemacs-layout--toggled-side-windows t)
+      (window-toggle-side-windows))))
+
+(defun pokemacs-layout--reenable-side-windows (&rest _)
+  "Reenable side windows if it was disabled previously."
+  (when pokemacs-layout--toggled-side-windows
+    (setq pokemacs-layout--toggled-side-windows nil)
+    (window-toggle-side-windows)))
+
+(advice-add #'balance-windows :before #'pokemacs-layout--disable-side-windows)
+(advice-add #'balance-windows :after #'pokemacs-layout--reenable-side-windows)
 
 ;;;###autoload
 (defun pokemacs-layout-apply (layout-name)
