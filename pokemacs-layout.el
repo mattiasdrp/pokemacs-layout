@@ -99,10 +99,10 @@ NUMBER can be:
   (cond
    ((functionp action)
     ;; If the action is a function we apply it in the current window
-    (let ((current-buffer (current-buffer)))
+    (let ((previous-buffer (window-buffer)))
       (funcall action)
       (let ((new-buffer (current-buffer)))
-        (set-window-buffer (selected-window) current-buffer)
+        (set-window-buffer (selected-window) previous-buffer)
         new-buffer)))
    ((stringp action)
     ;; If the action is a string, create a buffer with this string as a name
