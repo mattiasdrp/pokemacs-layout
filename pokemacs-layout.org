@@ -447,6 +447,17 @@ Prompt the user for a ~layout~ to apply and applies it.
     (pokemacs-layout--apply layout-name))
 #+end_src
 
+Reset the emacs frame to an empty state
+
+#+begin_src elisp
+  ;;;###autoload
+  (defun pokemacs-layout-reset ()
+    "Reset the emacs frame to an empty state."
+    (interactive)
+    (setq display-buffer-alist nil)
+    (delete-other-windows))
+#+end_src
+
 * Footer
 :PROPERTIES:
 :CUSTOM_ID: footer
