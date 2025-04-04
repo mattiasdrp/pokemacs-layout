@@ -290,6 +290,13 @@ SPLIT-TYPE is `column', `row', `none'.
      (list (completing-read "Layout: " layout-names))))
   (pokemacs-layout--apply layout-name))
 
+;;;###autoload
+(defun pokemacs-layout-reset ()
+  "Reset the emacs frame to an empty state."
+  (interactive)
+  (setq display-buffer-alist nil)
+  (delete-other-windows))
+
 ;; End:
 (provide 'pokemacs-layout)
 
