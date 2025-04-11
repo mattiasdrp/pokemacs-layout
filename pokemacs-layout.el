@@ -146,22 +146,25 @@ NUMBER can be:
            (window-width . ,pokemacs-layout-sidebar-width))))))))
 
 ;;;###autoload
-(defun pokemacs-layout--apply-layout (layout-windows-alist layout-sides-alist)
+(defun pokemacs-layout--apply-layout (monitor layout-windows-alist layout-sides-alist)
   "Creates a layout.
-The layout is split in two parts:
+The layout is split in three parts:
+- the monitor where it should be created
 - a layout of windows according to the provided LAYOUT-WINDOWS-ALIST
 - a layout of sides according to the provided LAYOUT-SIDES-ALIST."
   ;; Disable visual-fill-column-mode if enabled as it doesn't work well with
   ;; programatically creating windows
   (when (and (boundp 'visual-fill-column-mode) visual-fill-column-mode)
     (visual-fill-column-mode -1))
-  ;; Make sure that there's only one window
-  (delete-other-windows)
-  ;; Make sure that magit will create its buffer in the current window
-  (defvar magit-display-buffer-function)
-  (let ((magit-display-buffer-function 'magit-display-buffer-same-window-except-diff-v1))
-    (pokemacs-layout--apply-recursive-layout-windows-alist layout-windows-alist)
-    (pokemacs-layout--apply-layout-sides-alist layout-sides-alist)))
+  (let ((frame (if monitor (make-frame-on-monitor monitor) (selected-frame))))
+    (select-frame frame)
+    ;; Make sure that there's only one window
+    (delete-other-windows)
+    ;; Make sure that magit will create its buffer in the current window
+    (defvar magit-display-buffer-function)
+    (let ((magit-display-buffer-function 'magit-display-buffer-same-window-except-diff-v1))
+      (pokemacs-layout--apply-recursive-layout-windows-alist layout-windows-alist)
+      (pokemacs-layout--apply-layout-sides-alist layout-sides-alist))))
 
 (defvar pokemacs-layout-prog-default
   '(:windows
@@ -183,6 +186,17 @@ The layout is split in two parts:
     :sides
     ((right . ((1 magit-status-quick t)
                (2 ("*compilation*" "*lsp-help*") t))))))
+
+(defvar pokemacs-layout-prog-default-frames-custom-number
+  '((:monitor "HDMI-A-1"
+              :windows
+              ((column . (nil nil pokemacs-layout-columns))))
+    (:monitor "eDP-2"
+              :windows
+              ((column . (nil nil pokemacs-layout-columns)))
+              :sides
+              ((right . ((1 magit-status-quick t)
+                         (2 ("*compilation*" "*lsp-help*") t)))))))
 
 (defvar pokemacs-layout-elisp-default
   '(:windows
@@ -223,6 +237,10 @@ The last one is a sidebar split in three locked horizontal windows:
       pokemacs-layout-prog-default-nomagit
       "3 vertical columns with last one being compilation | lsp-help")
     ,(pokemacs-layout--create-layout
+      "prog custom monitors layout"
+      pokemacs-layout-prog-default-frames-custom-number
+      "vertical custom number of columns with last one being magit | compilation | lsp-help")
+    ,(pokemacs-layout--create-layout
       "prog custom layout"
       pokemacs-layout-prog-default-custom-number
       "vertical custom number of columns with last one being magit | compilation | lsp-help")
@@ -255,11 +273,20 @@ SPLIT-TYPE is `column', `row', `none'.
 
 (defun pokemacs-layout--apply (name)
   "Apply the layout linked to NAME."
+  (message "bleh")
   (let* ((layout (pokemacs-layout--extract-layout-with-name name))
-         (layout-layout (plist-get layout :layout))
-         (layout-windows (plist-get layout-layout :windows))
-         (layout-sides (plist-get layout-layout :sides)))
-    (pokemacs-layout--apply-layout layout-windows layout-sides)))
+         (monitor-layouts (plist-get layout :layout)))
+    (message "layout %S monitors %S" layout monitor-layouts)
+    (dolist (monitor-layout monitor-layouts) (pokemacs-layout--apply-monitor-layout monitor-layout))))
+
+(defun pokemacs-layout--apply-monitor-layout (monitor-layout)
+  "Apply the layout linked to NAME."
+  (message "monitor: %S %S %S" monitor-layout (plistp monitor-layout) (plist-get monitor-layout :monitor))
+  (let* ((monitor (plist-get monitor-layout :monitor))
+         (layout-windows (plist-get monitor-layout :windows))
+         (layout-sides (plist-get monitor-layout :sides)))
+    (message "%S %S %S" monitor layout-windows layout-sides)
+    (pokemacs-layout--apply-layout monitor layout-windows layout-sides)))
 
 (defvar pokemacs-layout--toggled-side-windows nil)
 
@@ -281,14 +308,17 @@ SPLIT-TYPE is `column', `row', `none'.
 (advice-add #'balance-windows :after #'pokemacs-layout--reenable-side-windows)
 
 ;;;###autoload
-(defun pokemacs-layout-apply (layout-name)
+(defun pokemacs-layout-apply (layout-name &optional columns)
   "Prompt the user for a LAYOUT to apply and applies it."
   (interactive
    (let* (
           (layout-names (pokemacs-layout--extract-layout-property :name))
           (completion-extra-properties `(:annotation-function ,#'pokemacs-layout--annotate-layout)))
-     (list (completing-read "Layout: " layout-names))))
-  (pokemacs-layout--apply layout-name))
+     (list (completing-read "Layout: " layout-names) current-prefix-arg)))
+  (message "blah")
+  (let* ((pokemacs-layout-columns (or columns pokemacs-layout-columns))
+         (current-prefix-arg nil))
+    (pokemacs-layout--apply layout-name)))
 
 ;;;###autoload
 (defun pokemacs-layout-reset ()
