@@ -4,7 +4,33 @@
 
 Pokemacs layout provides a way to save window layouts and apply them. Unlike ~desktop-save~, it's not about saving the state of your Emacs but more about restoring your windows the way you want them.
 
+* Table of Contents
+:PROPERTIES:
+:TOC:      :include all :ignore this
+:END:
+:CONTENTS:
+- [[#introduction][Introduction]]
+- [[#getting-started][Getting started]]
+- [[#how-to-use][How to use?]]
+  - [[#main-architecture][Main architecture]]
+    - [[#monitor][Monitor]]
+    - [[#window-layout][Window layout]]
+      - [[#simple-layout][Simple layout]]
+      - [[#complex-layout][Complex layout]]
+    - [[#side-layout][Side layout]]
+      - [[#simple-side][Simple side]]
+    - [[#children-layout][Children layout]]
+  - [[#complete-layouts][Complete layouts]]
+    - [[#programming-default][Programming default]]
+    - [[#programming-default-on-2-monitors][Programming default on 2 monitors]]
+  - [[#customize-pokemacs-layout-layouts][Customize pokemacs-layout-layouts]]
+- [[#future-plans][Future plans]]
+:END:
+
 * Introduction
+:PROPERTIES:
+:CUSTOM_ID: introduction
+:END:
 
 A friend of mine had a wide screen and told me about his morning routine:
 - Split horizontally thrice
@@ -62,13 +88,17 @@ A friend of mine had a wide screen and told me about his morning routine:
 And then I thought: "Hey, I'm sure I could create a simple layout type and allow for more customisations, let's do it!". This is the result of this experiment.
 
 * Getting started
+:PROPERTIES:
+:CUSTOM_ID: getting-started
+:END:
 
 Currently this package is not in any package manager but you can use it easily with elpaca or straight:
 
 #+begin_src emacs-lisp
   (use-package pokemacs-layout
     :ensure (:host github :repo "mattiasdrp/pokemacs-layout")
-    :commands pokemacs-layout-apply)
+    :commands pokemacs-layout-apply pokemacs-layout-monitor-names
+    pokemacs-restore-session pokemacs-layout-current-monitor)
 #+end_src
 
 Or, if you don't use ~use-package~:
@@ -80,10 +110,40 @@ Or, if you don't use ~use-package~:
 Just make sure that ~pokemacs-layout.el~ is in ~load-path~
 
 * How to use?
+:PROPERTIES:
+:CUSTOM_ID: how-to-use
+:END:
 
-A layout is a list of alists.
+** Main architecture
+:PROPERTIES:
+:CUSTOM_ID: main-architecture
+:END:
 
-** Simple layout: 3 columns, no actions
+A layout is a plist of ~'(:monitor monitor :windows windows-layout :sides sides-layout :children children-layout)~.
+
+Let's break it down.
+
+*** Monitor
+:PROPERTIES:
+:CUSTOM_ID: monitor
+:END:
+
+The ~:monitor~ property specifies on which monitor this frame should be created. As you'll usually apply a layout from a monitor, it's not recommended to specify a ~:monitor~ property for the main layout.
+
+*** Window layout
+:PROPERTIES:
+:CUSTOM_ID: window-layout
+:END:
+
+A window layout is a list of alists:
+
+**** Simple layout
+:PROPERTIES:
+:CUSTOM_ID: simple-layout
+:END:
+
+- 3 columns, no actions
+
 
 #+begin_src emacs-lisp :results none
   (defvar pokemacs-layout-simple-3C
@@ -92,37 +152,50 @@ A layout is a list of alists.
       (none . ())))
 
   ;; Or:
-  (defvar pokemacs-layout-simple-3C
-    '((column . (nil nil 2))))
+  (defvar pokemacs-layout-even-simpler-3C
+    '((column . (nil nil 3))))
 #+end_src
 
-You can already use this layout with
+You can already use these layout with
+
 #+begin_src emacs-lisp :results none
 (pokemacs-layout--apply-layout pokemacs-layout-simple-3C)
 #+end_src
 
-(if you read this README in emacs you can evaluate the two buffers with ~C-c C-c~)
+#+begin_src emacs-lisp :results none
+(pokemacs-layout--apply-layout pokemacs-layout-even-simpler-3C)
+#+end_src
 
-This simple example shows the skeleton of a layout: ~(split . action)~.
+(if you read this README in emacs you can evaluate the source blocks with ~C-c C-c~ and see the results immediately -- use ~winner-undo~ to go back to the previous layout)
+
+This simple example shows the skeleton of a window layout: ~(split . action)~.
 Currently ~split~ can be:
 - ~column~ (split horizontally)
 - ~row~ (split vertically)
 - ~none~ (don't split this window)
 
-  ~none~ should always be used as the last alist in any nested layout otherwise a last split will be performed.
 An ~action~ is composed of three fields ~(fill lock number)~:
 - ~fill~ is anything to help creating the buffer in the window (~nil~, a buffer name, a function call...)
-- ~lock~ is ~t~ if this window should be locked, meaning no buffer can spawn there
+- ~lock~ is ~t~ if this window should be locked, meaning no other buffer can spawn there
 - ~number~ to repeat this alist multiple times
 
-** Complex layout: 3 columns, the last one is also split in 3 with 3 specific buffers
+**** Complex layout
+:PROPERTIES:
+:CUSTOM_ID: complex-layout
+:END:
 
-#+begin_src emacs-lisp
-  (defvar pokemacs-layout-prog-default
+- 3 columns, the last one is also split in 3 with 3 specific buffers
+
+#+begin_src emacs-lisp :results none
+  (defvar pokemacs-layout-complex
     '((column . (nil nil 2))
       (none . ('((row . (magit-status-quick t))
                  (row . ("*compilation*" t))
                  (none . ("*lsp-help*" t))) nil nil))))
+#+end_src
+
+#+begin_src emacs-lisp :results none
+(pokemacs-layout--apply-layout pokemacs-layout-complex)
 #+end_src
 
 This layout will create three columns:
@@ -132,11 +205,93 @@ This layout will create three columns:
   - The second one is created with the ~compilation~ buffer (created if it doesn't exist)
   - The third one is like the second one but with the ~lsp-help~ buffer
 
+*** Side layout
+:PROPERTIES:
+:CUSTOM_ID: side-layout
+:END:
 
+A side layout is an alist of each side associated to its layout.
+
+**** Simple side
+:PROPERTIES:
+:CUSTOM_ID: simple-side
+:END:
+
+#+begin_src emacs-lisp :results none
+  (defvar pokemacs-layout-simple-right-side
+    '((right . ((1 "*Messages*" t)
+                (2 "*scratch*" t)))))
+#+end_src
+
+And you can see the result with
+
+#+begin_src emacs-lisp :results none
+  (pokemacs-layout--apply-layout-sides-alist pokemacs-layout-simple-right-side)
+#+end_src
+
+An ~side~ is a list of slots ~(number fill lock)~:
+- ~number~ is the slot index (starts at 1)
+- ~fill~ is anything to help creating the buffer in the window (~nil~, a buffer name, a function call...)
+- ~lock~ is ~t~ if this window should be locked, meaning no other buffer can spawn there
+
+*** Children layout
+:PROPERTIES:
+:CUSTOM_ID: children-layout
+:END:
+
+Finally, the ~:children~ is a list of layouts with the same architecture as the main layout. The interesting thing is that if the ~:monitor~ property is set, the child is created in a frame on another monitor.
+
+** Complete layouts
+:PROPERTIES:
+:CUSTOM_ID: complete-layouts
+:END:
+
+Example layouts:
+
+*** Programming default
+:PROPERTIES:
+:CUSTOM_ID: programming-default
+:END:
+
+2 columns with the message and scratch buffers and a side window with the magit buffer and a buffer for completion or lsp-help results
+#+begin_src emacs-lisp :results(defconst pokemacs-layout-prog-default
+  (defconst pokemacs-layout-prog-default
+    '((:windows
+       ((column . ("*Messages*" nil 1))
+        (none . ("*scratch*" nil 1)))
+       :sides
+       ((right . ((1 magit-status-quick t)
+                  (2 ("*compilation*" "*lsp-help*") t)))))))
+#+end_src
+
+*** Programming default on 2 monitors
+:PROPERTIES:
+:CUSTOM_ID: programming-default-on-2-monitors
+:END:
+
+Some columns with the current buffer and a side window with the magit buffer and a buffer for completion or lsp-help results. The number of columns is specified by ~pokemacs-layout-columns~ or with the universal argument ~C-u~ (try it with ~M-<n>~)
+A second frame is created on a second monitor specified by the custom variable ~pokemacs-layout-second-monitor~ and contains the message and scratch buffers.
+
+#+begin_src emacs-lisp :results none
+  (defconst pokemacs-layout-prog-default-frames-custom-number
+    `((:windows
+       ((column . (nil nil pokemacs-layout-columns)))
+       :sides
+       ((right . ((1 magit-status-quick t)
+                  (2 ("*compilation*" "*lsp-help*") t))))
+       :children
+       ((:monitor ,pokemacs-layout-second-monitor
+                  :windows
+                  ((column . ("*Messages*" nil 1))
+                   (none . ("*scratch*" nil 1))))))))
+#+end_src
 
 ** Customize ~pokemacs-layout-layouts~
+:PROPERTIES:
+:CUSTOM_ID: customize-pokemacs-layout-layouts
+:END:
 
-Wrap your newly created function:
+Wrap your newly created layouts:
 
 #+begin_src emacs-lisp
   (pokemacs-layout--create-layout
@@ -146,8 +301,12 @@ Wrap your newly created function:
 #+end_src
 
 And add it to ~pokemacs-layout-layouts~, this will make it available when calling ~M-x pokemacs-layout-apply~.
+
 * Future plans
+:PROPERTIES:
+:CUSTOM_ID: future-plans
+:END:
 
 - [ ] Improve this README
 - [ ] Add some pictures or gif to this README
-- [ ] Add new frames to the layout choices with monitor choice
+- [X] Add new frames to the layout choices with monitor choice
