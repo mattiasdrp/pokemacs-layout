@@ -167,6 +167,19 @@ NUMBER can be:
         (set-window-parameter new-window 'pokemacs-layout-buffer-type buffer-name)
         new-window))))
 
+(defun pokemacs-layout--sidebar-width ()
+  "Return `pokemacs-layout-sidebar-width' as an absolute value.
+
+If `pokemacs-layout-sidebar-width' is an absolute value, return it.
+If it's a percentage, return the width corresponding to the percentage of the value
+returned by `frame-width'."
+  (cond
+   ((integerp pokemacs-layout-sidebar-width) pokemacs-layout-sidebar-width)
+   ((and (stringp pokemacs-layout-sidebar-width)
+         (string-match "^\\([0-9]+\\)%?$" pokemacs-layout-sidebar-width))
+    (round (* (/ (string-to-number (match-string 1 pokemacs-layout-sidebar-width)) 100.0) (frame-width))))
+   (t (error "Invalid size format: %S" value))))
+
 (defun pokemacs-layout--apply-layout-sides-alist (layout-sides-alist &optional main-buffer)
   "For each side in LAYOUT-SIDES-ALIST, create its layout."
   (with-current-buffer (if main-buffer main-buffer (current-buffer))
@@ -190,7 +203,7 @@ NUMBER can be:
                          (dedicated . t)
                          (inhibit-switch-frame nil)
                          (reusable-frames . t)
-                         (window-width . ,pokemacs-layout-sidebar-width)))
+                         (window-width . ,(pokemacs-layout--sidebar-width))))
           (let ((new-window (display-buffer-in-side-window
                              buffer
                              `((side . ,side)
@@ -198,7 +211,7 @@ NUMBER can be:
                                (dedicated . t)
                                (inhibit-switch-frame nil)
                                (reusable-frames . t)
-                               (window-width . ,pokemacs-layout-sidebar-width)))))
+                               (window-width . ,(pokemacs-layout--sidebar-width))))))
             (push (cons new-window buffer-regex) pokemacs-layout--side-windows)
             (set-window-parameter new-window 'pokemacs-layout-buffer-type buffer-regex))))))))
 
@@ -322,10 +335,11 @@ NUMBER can be:
   "Create a property list containing the NAME of the layout, its content (LAYOUT-ALIST) and its DESCRIPTION."
   `(:name ,name :layout ,layout-alist :description ,description))
 
-(defcustom pokemacs-layout-sidebar-width 70
+(defcustom pokemacs-layout-sidebar-width "50%"
   "Width of sidebars."
   :group 'pokemacs-layout
-  :type 'int
+  :type '(choice (integer :tag "Absolute")
+                 (strinng :tag "Percentage"))
   :tag " Sidebar width")
 
 (defcustom pokemacs-layout-columns 3
