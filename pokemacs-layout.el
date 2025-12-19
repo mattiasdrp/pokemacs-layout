@@ -81,6 +81,11 @@ NUMBER can be:
                     ((functionp action)
                      ;; If the action is a function we apply it in the current window
                      (funcall action))
+
+                    ((equal action :main)
+                     ;; If the action is :main we put the current-buffer
+                     (set-window-buffer (selected-window) main-buffer))
+
                     ((stringp action)
                      ;; If the action is a string, create a buffer with this string as a name
                      (set-window-buffer (selected-window) (get-buffer-create action)))
@@ -292,7 +297,7 @@ returned by `frame-width'."
 (defconst pokemacs-layout-prog-default
   '((:windows
      ((column . ("*Messages*" nil 1))
-      (none . ("*scratch*" nil 1)))
+      (none . (:main nil 1)))
      :sides
      ((right . ((1 magit-status-quick t)
                 (2 ("*compilation*" "*lsp-help*") t)))))))
